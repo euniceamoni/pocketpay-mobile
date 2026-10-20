@@ -9,6 +9,7 @@
     "web": "expo start --web",
     "test": "jest --watchAll=false",
     "test:watch": "jest",
+    "test:send": "jest --watchAll=false src/components/__tests__/SendPaymentForm.test.tsx",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
     "api:check": "node scripts/check-sdk-api.js",
@@ -21,6 +22,10 @@
     ],
     "setupFilesAfterEnv": [
       "@testing-library/jest-native/extend-expect"
+    ],
+    "testMatch": [
+      "<rootDir>/**/__tests__/**/*.test.[jt]s?(x)",
+      "<rootDir>/**/?(*.)+(spec|test).[jt]s?(x)"
     ],
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/src/$1",

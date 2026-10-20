@@ -74,9 +74,11 @@ jest.mock('expo-camera', () => ({
 
 import { useWalletStore } from '../src/store/walletStore';
 import { useRouter } from 'expo-router';
+import { sendXlmTransaction } from '../src/services/stellar';
 
 const mockUseWalletStore    = useWalletStore as jest.MockedFunction<typeof useWalletStore>;
 const mockUseRouter         = useRouter     as jest.MockedFunction<typeof useRouter>;
+const mockSendXlmTransaction = sendXlmTransaction as jest.MockedFunction<typeof sendXlmTransaction>;
 
 import SendScreen from '../app/send';
 
@@ -134,6 +136,20 @@ describe('AC1 – invalid address error', () => {
     fireEvent.press(getByText('Send Payment'));
 
     expect(getByText('Please enter a destination address.')).toBeTruthy();
+  });
+
+  it('shows an error alert when the destination address is malformed', async () => {
+    const { validatePublicKey } = require('pocketpay-sdk');
+    (validatePublicKey as jest.Mock).mockReturnValueOnce(false);
+
+    const { getByPlaceholderText, getByText } = render(<SendScreen />);
+
+    fireEvent.changeText(getByPlaceholderText('G...'), 'not-a-valid-address');
+    fireEvent.changeText(getByPlaceholderText('0.00'), VALID_AMOUNT);
+    fireEvent.press(getByText('Send Payment'));
+
+    expect(getByText('Please enter a valid Stellar address.')).toBeTruthy();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });
 
@@ -210,6 +226,19 @@ describe('AC3 – submit is blocked when the form is invalid', () => {
     fireEvent.press(getByText('Send Payment'));
 
     expect(getByText('Amount must be more than 0.')).toBeTruthy();
+    expect(mockSendXlmTransaction).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('does not navigate to sign-confirmation when the amount exceeds the balance', async () => {
+    setupWalletStore({ balance: '5.0000000' });
+    const { getByPlaceholderText, getByText } = render(<SendScreen />);
+
+    fireEvent.changeText(getByPlaceholderText('G...'), VALID_DESTINATION);
+    fireEvent.changeText(getByPlaceholderText('0.00'), '50');
+    fireEvent.press(getByText('Send Payment'));
+
+    expect(getByText("You don't have enough XLM for this payment.")).toBeTruthy();
     expect(mockPush).not.toHaveBeenCalled();
   });
 
@@ -275,6 +304,49 @@ describe('AC4 – valid form routes into sign confirmation', () => {
           network: 'Testnet',
         },
       });
+    });
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────
+// AC5 – Submission failure displays an error
+// ────────────────────────────────────────────────────────────────────────
+
+describe('AC5 – submission failure displays an error', () => {
+  it('shows an error alert when sendXlmTransaction rejects', async () => {
+    mockSendXlmTransaction.mockRejectedValueOnce(new Error('Network error'));
+
+    const { getByPlaceholderText, getByText } = render(<SendScreen />);
+
+    fireEvent.changeText(getByPlaceholderText('G...'), VALID_DESTINATION);
+    fireEvent.changeText(getByPlaceholderText('0.00'), VALID_AMOUNT);
+    fireEvent.press(getByText('Send Payment'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Payment Failed',
+        expect.stringContaining('Network error'),
+      );
+    });
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('shows an error alert when navigation to sign-confirmation throws', async () => {
+    mockPush.mockImplementationOnce(() => {
+      throw new Error('Navigation failed');
+    });
+
+    const { getByPlaceholderText, getByText } = render(<SendScreen />);
+
+    fireEvent.changeText(getByPlaceholderText('G...'), VALID_DESTINATION);
+    fireEvent.changeText(getByPlaceholderText('0.00'), VALID_AMOUNT);
+    fireEvent.press(getByText('Send Payment'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Payment Failed',
+        expect.stringContaining('Navigation failed'),
+      );
     });
   });
 });
